@@ -88,8 +88,12 @@ Sincerely,
 }
 
 func readConfigurationFile(filepath string) Configuration {
-	var conf Configuration
-	if rawConfigurationJson, err := ioutil.ReadFile(filepath); err != nil {
+	var (
+		rawConfigurationJson []byte
+		conf Configuration
+		err error
+	)
+	if rawConfigurationJson, err = ioutil.ReadFile(filepath); err != nil {
 		log.Print("error reading smtp config file ", err)
 	}
 	if err = json.Unmarshal(rawConfigurationJson, &conf); err != nil {
@@ -104,8 +108,12 @@ func connectToSmtpServer(emailUser EmailUser) smtp.Auth {
 }
 
 func getFailedSlurpResponse() []byte {
+	var (
+		failResponseJSON []byte
+		err error
+	)
 	failResponse := &ParsedResponse{false, nil}
-	if failResponseJSON, err := json.Marshal(failResponse); err != nil {
+	if failResponseJSON, err = json.Marshal(failResponse); err != nil {
 		log.Print("something went really weird in attempt to marshal a fail json ", err)
 		failResponseJSON, _ = json.Marshal(nil)
 	}
@@ -114,20 +122,20 @@ func getFailedSlurpResponse() []byte {
 
 func slurpHandler(w http.ResponseWriter, r *http.Request) {
 	urlToScrape := strings.ToLower(r.URL.Query().Get("urlToScrape"))
+	var (
+		crossDomainRegex *regexp.Regexp
+		doc *goquery.Document
+		err error
+		parsedResponseJSON []byte
+		link map[string]string
+		href string
+		exists bool
+		content string
+		links []map[string]string
+	)
 
-	var doc *goquery.Document
-	var e error
-	var parsedResponseJSON []byte
-
-	var link map[string]string
-	var href string
-	var exists bool
-	var content string
-
-	var links []map[string]string
-
-	if doc, e = goquery.NewDocument(urlToScrape); e == nil {
-		if crossDomainRegex, err := regexp.Compile(`^http`); err != nil {
+	if doc, err = goquery.NewDocument(urlToScrape); err == nil {
+		if crossDomainRegex, err = regexp.Compile(`^http`); err != nil {
 			log.Printf("issue compiling regular expression to validate cross domain URLs")
 		}
 
@@ -150,7 +158,7 @@ func slurpHandler(w http.ResponseWriter, r *http.Request) {
 			parsedResponseJSON = getFailedSlurpResponse()
 		}
 	} else {
-		log.Print("error querying for document: ", urlToScrape, "err : ", e)
+		log.Print("error querying for document: ", urlToScrape, "err : ", err)
 		parsedResponseJSON = getFailedSlurpResponse()
 	}
 
@@ -159,8 +167,13 @@ func slurpHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func checkHandler(w http.ResponseWriter, r *http.Request) {
+	var (
+		err error
+		externalServerResponse *http.Response
+		responseJSON []byte
+	)
 	urlToCheck := r.URL.Query().Get("urlToCheck")
-	if externalServerResponse, err := http.Get(urlToCheck); err != nil {
+	if externalServerResponse, err = http.Get(urlToCheck); err != nil {
 		log.Print("error getting in checkHandler ", urlToCheck)
 	}
 
@@ -169,7 +182,7 @@ func checkHandler(w http.ResponseWriter, r *http.Request) {
 		"statusCode": externalServerResponse.StatusCode,
 	}
 
-	if responseJSON, err := json.Marshal(response); err != nil {
+	if responseJSON, err = json.Marshal(response); err != nil {
 		log.Print("error Marshalling check response json: ", err)
 	}
 	w.Write(responseJSON)
@@ -213,18 +226,18 @@ func emailHandlerClosure(auth smtp.Auth, recaptchaPrivateKey string, emailUser E
 }
 
 func main() {
-	conf = readConfigurationFile("../conf/conf.json")
+	conf = readConfigurationFile("conf/conf.json")
 	auth := connectToSmtpServer(conf.Smtp)
 	http.HandleFunc("/slurp", slurpHandler)
 	http.HandleFunc("/check", checkHandler)
 	http.HandleFunc("/email", emailHandlerClosure(auth, conf.RecaptchaPrivateKey, conf.Smtp))
-	http.Handle("/", http.FileServer(http.Dir("..")))
-	http.Handle("/css/", http.FileServer(http.Dir("..")))
-	http.Handle("/img/", http.FileServer(http.Dir("..")))
-	http.Handle("/lib/", http.FileServer(http.Dir("..")))
-	http.Handle("/partials/", http.FileServer(http.Dir("..")))
-	http.Handle("/js/", http.FileServer(http.Dir("..")))
-	if http.ListenAndServe(":8000", nil) != nil {
+	http.Handle("/", http.FileServer(http.Dir("../client/app")))
+	http.Handle("/css/", http.FileServer(http.Dir("../client/app")))
+	http.Handle("/img/", http.FileServer(http.Dir("../client/app")))
+	http.Handle("/lib/", http.FileServer(http.Dir("../client/app")))
+	http.Handle("/partials/", http.FileServer(http.Dir("../client/app")))
+	http.Handle("/js/", http.FileServer(http.Dir("../client/app")))
+	if err := http.ListenAndServe(":8000", nil); err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
 }
